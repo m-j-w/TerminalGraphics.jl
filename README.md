@@ -13,7 +13,7 @@ use this several decade old technology for modern technical programming tasks?
 
  1. Use the Julia package manager to obtain 'TerminalGraphics'
 
-        Pgk.clone("Pkg.clone("https://github.com/m-j-w/TerminalGraphics.jl")
+        Pgk.clone("https://github.com/m-j-w/TerminalGraphics.jl")
 
  2. Download a recent version of ['libsixel'](https://github.com/saitoha/libsixel/)
     (master branch) and build it from source.
