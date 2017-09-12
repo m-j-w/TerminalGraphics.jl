@@ -1,4 +1,4 @@
-using SixelDisplay
+using TerminalGraphics
 using Base.Test
 
 # write your own tests here
