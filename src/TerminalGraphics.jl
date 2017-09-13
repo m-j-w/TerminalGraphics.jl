@@ -208,7 +208,15 @@ Called by Julia module loaded on successful loading of a new module `m`.
 Used to add features to known modules with graphical output,
 such as 'Plots.jl'.
 """
-_module_loaded_callback(m::Symbol) = nothing
+_module_loaded_callback(m::Symbol) = begin
+    if m in [:Plots, :Cairo, :Luxor]
+        isdefined(m) && isa(getfield(Main, m), Module) && begin
+            md = string(m) * ".jl"
+            info("TerminalGraphics: $md detected, enabling integration.")
+            include("integrations/$md")
+        end
+    end
+end
 
 """
 Called when the REPL is initialised, this happens after
@@ -235,8 +243,22 @@ __init__() = begin
         Base.atreplinit(_repl_init_callback)
     end
 
+    # Check for known module integrations.
+    isdefined(:Plots) && isa(getfield(Main, :Plots), Module) && begin
+        info("TerminalGraphics: Plots.jl detected, enabling integration.")
+        include("integrations/Plots.jl")
+    end
+    isdefined(:Cairo) && isa(getfield(Main, :Cairo), Module) && begin
+        info("TerminalGraphics: Cairo.jl detected, enabling integration.")
+        include("integrations/Cairo.jl")
+    end
+    isdefined(:Luxor) && isa(getfield(Main, :Luxor), Module) && begin
+        info("TerminalGraphics: Luxor.jl detected, enabling integration.")
+        include("integrations/Luxor.jl")
+    end
+
     # Give a hint to the user.
-    info("Module TerminalGraphics is now loaded. Observe...")
+    info("Module TerminalGraphics is now loaded, console graphics enabled.")
 
 end
 
