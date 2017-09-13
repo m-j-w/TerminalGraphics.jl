@@ -17,6 +17,7 @@ module TerminalGraphics
 
 using Colors: Colorant, Gray, N0f8, base_colorant_type
 
+
 "Default to an initialised REPL, or STDOUT otherwise."
 _default_sixel_io() =
     isdefined(Base, :active_repl) ? Base.active_repl.t : STDOUT
@@ -212,8 +213,8 @@ _module_loaded_callback(m::Symbol) = begin
     if m in [:Plots, :Cairo, :Luxor]
         isdefined(m) && isa(getfield(Main, m), Module) && begin
             md = string(m) * ".jl"
-            info("TerminalGraphics: $md detected, enabling integration.")
-            include("integrations/$md")
+            include(joinpath(dirname(@__FILE__), "integrations", "$md"))
+            info("TerminalGraphics: $md detected, integration enabled.")
         end
     end
 end
@@ -223,11 +224,8 @@ Called when the REPL is initialised, this happens after
 the module's `__init__()`, but only if this module is loaded
 during an initial Julia startup.
 """
-_repl_init_callback(repl) = begin
-    # TODO: add proper type assertions
-    # Create and push our new display / output handler
-    pushdisplay(SixelDisplay(repl.t))
-end
+# TODO: add proper type assertions
+_repl_init_callback(repl) = pushdisplay(SixelDisplay(repl.t))
 
 __init__() = begin
 
@@ -244,17 +242,8 @@ __init__() = begin
     end
 
     # Check for known module integrations.
-    isdefined(:Plots) && isa(getfield(Main, :Plots), Module) && begin
-        info("TerminalGraphics: Plots.jl detected, enabling integration.")
-        include("integrations/Plots.jl")
-    end
-    isdefined(:Cairo) && isa(getfield(Main, :Cairo), Module) && begin
-        info("TerminalGraphics: Cairo.jl detected, enabling integration.")
-        include("integrations/Cairo.jl")
-    end
-    isdefined(:Luxor) && isa(getfield(Main, :Luxor), Module) && begin
-        info("TerminalGraphics: Luxor.jl detected, enabling integration.")
-        include("integrations/Luxor.jl")
+    for m in [:Plots, :Cairo, :Luxor]
+        _module_loaded_callback(m)
     end
 
     # Give a hint to the user.

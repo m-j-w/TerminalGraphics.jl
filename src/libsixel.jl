@@ -26,47 +26,45 @@ Equivalent to the `struct` defined by `libsixel::sixel_encoder_t`.
 Apparently these two definitions must always be in sync.
 """
 struct SixelEncoder
-    "reference counter"
-    ref                  ::Cuint
-    "sixel_allocator_t"
-    allocator            ::PtrToSixelAllocator
-    reqcolors            ::Cint
-    color_option         ::Cint
-    mapfile              ::Cstring
-    builtin_palette      ::Cint
-    method_for_diffuse   ::Cint
-    method_for_largest   ::Cint
-    method_for_rep       ::Cint
-    quality_mode         ::Cint
-    method_for_resampling::Cint
-    loop_mode            ::Cint
-    palette_type         ::Cint
-    f8bit                ::Cint
-    finvert              ::Cint
-    fuse_macro           ::Cint
-    fignore_delay        ::Cint
-    complexion           ::Cint
-    fstatic              ::Cint
-    pixelwidth           ::Cint
-    pixelheight          ::Cint
-    percentwidth         ::Cint
-    percentheight        ::Cint
-    clipx                ::Cint
-    clipy                ::Cint
-    clipwidth            ::Cint
-    clipheight           ::Cint
-    clipfirst            ::Cint
-    macro_number         ::Cint
-    penetrate_multiplexer::Cint
-    encode_policy        ::Cint
-    pipe_mode            ::Cint
-    verbose              ::Cint
-    has_gri_arg_limit    ::Cint
-    bgcolor              ::Cstring
-    outfd                ::Cint
-    finsecure            ::Cint
-    cancel_flag          ::Ptr{Cint}
-    dither_cache         ::Ptr{Void}
+    ref                   ::Cuint                    # reference counter
+    allocator             ::PtrToSixelAllocator
+    reqcolors             ::Cint
+    color_option          ::Cint
+    mapfile               ::Cstring
+    builtin_palette       ::Cint
+    method_for_diffuse    ::Cint
+    method_for_largest    ::Cint
+    method_for_rep        ::Cint
+    quality_mode          ::Cint
+    method_for_resampling ::Cint
+    loop_mode             ::Cint
+    palette_type          ::Cint
+    f8bit                 ::Cint
+    finvert               ::Cint
+    fuse_macro            ::Cint
+    fignore_delay         ::Cint
+    complexion            ::Cint
+    fstatic               ::Cint
+    pixelwidth            ::Cint
+    pixelheight           ::Cint
+    percentwidth          ::Cint
+    percentheight         ::Cint
+    clipx                 ::Cint
+    clipy                 ::Cint
+    clipwidth             ::Cint
+    clipheight            ::Cint
+    clipfirst             ::Cint
+    macro_number          ::Cint
+    penetrate_multiplexer ::Cint
+    encode_policy         ::Cint
+    pipe_mode             ::Cint
+    verbose               ::Cint
+    has_gri_arg_limit     ::Cint
+    bgcolor               ::Cstring
+    outfd                 ::Cint
+    finsecure             ::Cint
+    cancel_flag           ::Ptr{Cint}
+    dither_cache          ::Ptr{Void}
 end
 
 # offset value of pixelformat
@@ -234,52 +232,39 @@ const encoder_options = Dict{Symbol,Cint}(
 #
 #
 
+#=-------------------------------------------------------------------------=#
+#
+#   Binary dependencies & initalisation
+#
+#=-------------------------------------------------------------------------=#
+
+const depsfile = joinpath(dirname(@__FILE__), "..", "deps", "deps.jl")
+if isfile(depsfile)
+    include(depsfile)
+else
+    error( "'TerminalGraphics' is not properly installed.\n" *
+           "Please run Pkg.build(\"TerminalGraphics\"), then restart Julia." )
+end
+
 # use this everywhere accessing libsixel the encoder instance is required
 const PtrToSixelEncoder = Ptr{SixelEncoder}
 
-"Handle to the dynamically loaded 'libsixel'."
-global const libsixel = Ref{Ptr{Void}}(C_NULL)
 "Handle (pointer) to the default 'libsixel' encoder instance."
-global const encoder = Ref{PtrToSixelEncoder}(C_NULL)
+const encoder = Ref{PtrToSixelEncoder}(C_NULL)
 
-using Base.Libdl: dlopen, dlsym, dlpath
-
-function __init__()
-
-    libsixel_path = joinpath(Pkg.dir("TerminalGraphics"), "lib", "libsixel.so")
-    libsixel_path = isfile(libsixel_path) ? libsixel_path : "libsixel.so"
-    libsixel_path = get(ENV, "JULIA_LIBSIXEL", libsixel_path)
-        
-    global libsixel[] = dlopen(libsixel_path)
-
-    for fn in ( :sixel_encoder_new, :sixel_encoder_unref,
-                :sixel_encoder_encode, :sixel_encoder_encode_bytes,
-                :sixel_encoder_setopt, :sixel_helper_format_error)
-        try
-            fnptr = dlsym(libsixel[], fn)
-            @eval global const $fn = $fnptr
-        catch err
-            error("TerminalGraphics: The required function '$fn' could not be " *
-                "found in 'libsixel', loaded from '$libsixel_path': \n" *
-                "The library loaded gave: " * string(err) * "\n" *
-                "Have you really installed the latest version and built from source?")
-        end        
-    end
-
-    global encoder[] = encoder_new()
-
-end
+__init__() = (global encoder[] = encoder_new())
 
 
+#=-------------------------------------------------------------------------=#
 #
+#   Function wrappers
 #
-#  Function wrappers
-#
-#
+#=-------------------------------------------------------------------------=#
+
 
 function encoder_new() ::PtrToSixelEncoder
     enc = Ref{PtrToSixelEncoder}()
-    ccall( sixel_encoder_new, Cint
+    ccall( (:sixel_encoder_new, libsixel), Cint
          , (Ref{PtrToSixelEncoder}, PtrToSixelAllocator)
          , enc, C_NULL
          ) |> throw_on_sixelerror
@@ -287,33 +272,30 @@ function encoder_new() ::PtrToSixelEncoder
 end
 
 encoder_unref(enc::PtrToSixelEncoder) ::Void =
-    ccall( sixel_encoder_unref, Void, (PtrToSixelEncoder,), enc )
+    ccall( (:sixel_encoder_unref, libsixel), Void, (PtrToSixelEncoder,), enc )
 
 encoder_setopt(opt::Symbol, val=nothing) = encoder_setopt(encoder[], opt, val)
-encoder_encode(filename::AbstractString) = encoder_encode(encoder[], filename)
-encoder_encode_bytes(img::Matrix) = encoder_encode_bytes(encoder[], img)
-
 function encoder_setopt(enc::PtrToSixelEncoder, opt::Symbol, val)
     opt_num = encoder_options[opt]
     v = val === nothing ? C_NULL : string(val)
-    ccall( sixel_encoder_setopt, Cint, (PtrToSixelEncoder, Cint, Cstring)
+    ccall( (:sixel_encoder_setopt, libsixel), Cint
+         , (PtrToSixelEncoder, Cint, Cstring)
          , enc, opt_num, v) |> throw_on_sixelerror
 end
 
+encoder_encode(filename::AbstractString) = encoder_encode(encoder[], filename)
 encoder_encode(enc::PtrToSixelEncoder, filename::AbstractString) ::Void =
-    ccall( sixel_encoder_encode, Cint, (PtrToSixelEncoder, Cstring)
+    ccall( (:sixel_encoder_encode, libsixel), Cint, (PtrToSixelEncoder, Cstring)
          , enc, string(filename)) |> throw_on_sixelerror
 
-function encoder_encode_bytes(
-    enc::PtrToSixelEncoder, img::Matrix{C}
-    ) where {C<:Colorant}
-    eltype(C) !== N0f8 &&
-        throw(ArgumentError(
+encoder_encode_bytes(img::Matrix) = encoder_encode_bytes(encoder[], img)
+function encoder_encode_bytes(enc::PtrToSixelEncoder, img::Matrix{C}) where {C<:Colorant}
+    eltype(C) !== N0f8 && throw(ArgumentError(
             "'libsixel' can only display 8bit per color channel. " *
             "Convert your image!"))
     pixelformat = supported_colormaps[C]
     width, height = size(img)
-    ccall( sixel_encoder_encode_bytes, Cint
+    ccall( (:sixel_encoder_encode_bytes, libsixel), Cint
          , (PtrToSixelEncoder, Ptr{Void}, Cint, Cint, Cint, Ptr{Void}, Cint)
          ,  enc, img, width, height, pixelformat, C_NULL, 0
          ) |> throw_on_sixelerror
@@ -321,12 +303,12 @@ end
 
 function throw_on_sixelerror(x::Cint) ::Void
     x == 0 && return
-    s = ccall(sixel_helper_format_error, Cstring, (Cint,), x)
+    s = ccall( (:sixel_helper_format_error, libsixel), Cstring, (Cint,), x)
     throw(SixelError(Base.unsafe_string(s)))
 end
 
 
-end # module TerminalGraphics.libsixel
+end # module TerminalGraphics.LibSixel
 
 
 #=--- end of file ---------------------------------------------------------=#
