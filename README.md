@@ -2,11 +2,9 @@
 
 **A proof of concept!** — for which a picture says more than a thousand words...
 
-![First Example of TerminalGraphics with MLTemm]
-(manual/TerminalGraphics_Example_1.png)
+![First Example of TerminalGraphics with MLTerm](manual/TerminalGraphics_Example_1.png)
 
-![Second Example of TerminalGraphics with MLTemm]
-(manual/TerminalGraphics_Example_2.png)
+![Second Example of TerminalGraphics with MLTerm](manual/TerminalGraphics_Example_2.png)
 
 Some terminal emulators support the DEC Sixel raster graphics format,
 and ['libsixel'](https://github.com/saitoha/libsixel/) provides a convenient
