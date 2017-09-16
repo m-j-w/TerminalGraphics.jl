@@ -10,6 +10,12 @@
 #
 #=-------------------------------------------------------------------------=#
 
+# Note on GR backend of Plots. From jheinen: Internally, GR dumps a cairo
+# surface into sixel format. The escape sequence is used for iTerm2 to control
+# size and position of the sixel plot ("gks.six")
+# ENV["GKSwstype"] = "six" will create a file gks.six. So, in principle, this
+# file could also be rendered in a terminal other than iTerm2 (with sixel support)
+
 import Base: display
 display(d::TerminalGraphics.SixelDisplay, plt::Plots.Plot) = begin
     # define a temporary filename and plot to it
@@ -20,12 +26,10 @@ display(d::TerminalGraphics.SixelDisplay, plt::Plots.Plot) = begin
         show(io, MIME("image/png"), plt)
     end
     # draw the 'png'
-    plottype = string(typeof(plt))
-    title = string(get(plt.attr, :title, ""))
-    title = length(title) == 0 ? "untitled $plottype" : "$plottype '$title'"
+    title = string(plt)
     size = string(get(plt.attr, :size, ""))
     size = length(size) == 0 ? "unspecified size" : "size $size"
-    println(d.io, "Drawing $title of $size, temporarily at $fn")
+    println(d.io, "Drawing $title of $size ($fn)")
     TerminalGraphics.draw(d.io, fn)
     # delete the 'png'
     isfile(fn) && Base.Filesystem.rm(fn)

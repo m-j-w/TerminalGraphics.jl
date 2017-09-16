@@ -304,7 +304,7 @@ end
 function throw_on_sixelerror(x::Cint) ::Void
     x == 0 && return
     s = ccall( (:sixel_helper_format_error, libsixel), Cstring, (Cint,), x)
-    throw(SixelError(Base.unsafe_string(s)))
+    throw(SixelError("LibSixel error: " * Base.unsafe_string(s)))
 end
 
 

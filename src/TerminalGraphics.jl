@@ -17,7 +17,6 @@ module TerminalGraphics
 
 using Colors: Colorant, Gray, N0f8, base_colorant_type
 
-
 "Default to an initialised REPL, or STDOUT otherwise."
 _default_sixel_io() =
     isdefined(Base, :active_repl) ? Base.active_repl.t : STDOUT
@@ -25,7 +24,8 @@ _default_sixel_io() =
 include("libsixel.jl")      # low-level wrappers of libsixel
 include("terminal.jl")      # escape sequences to query the terminal
 
-using .Terminal
+using .Terminal: hassixel
+
 
 #=-------------------------------------------------------------------------=#
 #
@@ -77,7 +77,7 @@ draw(io::IO, x; kwargs...) = error("""
 
 """
     draw([io,] image_filename)
-    
+
 Draw the image stored in the file `filename` an a Sixel-enabled terminal
 emulator.  Uses the image loader of 'libsixel', which supports typically
 at least 'png', 'jpeg', 'gif', 'bmp', including animated versions.
@@ -98,7 +98,7 @@ draw(io::IO, filename::AbstractString) = LibSixel.encoder_encode(string(filename
 
 """
     draw([io,] image::Matrix{C})  where {C<:Colorant}
-    
+
 Draw the image loaded in memory as a matrix of colors 'C' in a Sixel-enabled
 terminal emulator.  Uses the sixel encoder of 'libsixel', which performs
 dithering and palette computations automatically.
@@ -111,15 +111,13 @@ function draw(io::IO, img::Matrix{C}; flip::Bool=true) where {C<:Colorant}
     println(io, "Drawing image of size ", size(img), ", ", C, ":")
     image = flip ? Base.permutedims(img, (2,1)) : img
     convimage = convert_image_colordepth(image)
-    #LibSixel.encoder_setopt(:PALETTE_TYPE, "hls")
-    #LibSixel.encoder_setopt(:ENCODE_POLICY, "fast")
-    #LibSixel.encoder_setopt(:STATIC)
     LibSixel.encoder_encode_bytes(convimage)
 end
 
+
 """
     draw([io,] image::AbstractArray{C,3})  where {C<:Colorant}
-    
+
 Draw the image loaded in memory as a matrix of colors 'C' in a Sixel-enabled
 terminal emulator.  Uses the sixel encoder of 'libsixel', which performs
 dithering and palette computations automatically.
@@ -130,11 +128,11 @@ TODO: Third dimension appears to be a palette type ?!?
 The image is transposed automatically, or depending on the additional keyword
 argument `flip::Bool`.
 """
-function draw(io::IO, img::AbstractArray{C,3}; flip::Bool=true) where {C<:Colorant}
-    # TODO: Redirect the io.
-    warn("IS THIS OUTPUT CORRECT?")
-    println(io, "Drawing image of size ", size(img), ":")
+function draw(io::IO, img::Array{C,3}; flip::Bool=true) where {C<:Colorant}
+    println(io, "Drawing first of a series of images of size ", size(img), ":")
+    img = img[:,:,1]
     image = flip ? Base.permutedims(img, (2,1)) : img
+    convimage = convert_image_colordepth(image)
     LibSixel.encoder_encode_bytes(image)
 end
 
@@ -185,26 +183,6 @@ display(d::SixelDisplay, img::AbstractMatrix{C}) where {C<:Colorant} = draw(d.io
 #=-------------------------------------------------------------------------=#
 
 """
-Try to secretly test the terminal emulator for Sixel support by sending
-a Sixel escape sequence and observing cursor movement.  If the cursor
-moves by an expected number of characters, then we have Sixel support.
-Otherwise, sadly no.  Unsupported emulators may either simply eat the
-whole escape sequence, e.g. xterm, or print the raw sequence.
-"""
-_check_sixel_support(io::IO) = begin
-    # test with a 6 x 3 * character width image.
-    char_height, char_width = Terminal.textarea_size(io)
-    test_sixel = rand(Gray{N0f8}, (6, 3*char_width))
-    # record the current cursor position
-    oldpos = Terminal.cursor_position(io)
-    draw(io, test_sixel)
-    newpos = Terminal.cursor_position(io)
-    return (newpos .- oldpos)
-    # TODO: Well, the screen scrolls and the cursor is again in the same
-    #       position... How to prevent that?!?
-end
-
-"""
 Called by Julia module loaded on successful loading of a new module `m`.
 Used to add features to known modules with graphical output,
 such as 'Plots.jl'.
@@ -214,7 +192,7 @@ _module_loaded_callback(m::Symbol) = begin
         isdefined(m) && isa(getfield(Main, m), Module) && begin
             md = string(m) * ".jl"
             include(joinpath(dirname(@__FILE__), "integrations", "$md"))
-            info("TerminalGraphics: $md detected, integration enabled.")
+            info("TerminalGraphics detected $md; integration enabled.")
         end
     end
 end
@@ -225,21 +203,20 @@ the module's `__init__()`, but only if this module is loaded
 during an initial Julia startup.
 """
 # TODO: add proper type assertions
-_repl_init_callback(repl) = pushdisplay(SixelDisplay(repl.t))
+__repl_init__(repl) = begin
+    
+    if !hassixel()
+        # TODO: Get proper identification of the terminal emulator
+        warn("This terminal emulator appears to not support sixel graphics.\n" *
+             (" "^9) * "'TerminalGraphics' is not enabled. " *
+             "Use w.g. MLTerm or MinTTY.")
+        return
+    end
 
-__init__() = begin
+    pushdisplay(SixelDisplay(repl.t))
 
     # Register callbacks to get informed on newly loaded modules
     push!(Base.package_callbacks, _module_loaded_callback)
-
-    # if the REPL is already initialised, inject
-    # the third party module support manually, otherwise
-    # register the callback for when the REPL is ready
-    if isdefined(Base, :active_repl)
-        _repl_init_callback(Base.active_repl)
-    else
-        Base.atreplinit(_repl_init_callback)
-    end
 
     # Check for known module integrations.
     for m in [:Plots, :Cairo, :Luxor]
@@ -247,7 +224,22 @@ __init__() = begin
     end
 
     # Give a hint to the user.
-    info("Module TerminalGraphics is now loaded, console graphics enabled.")
+    info("TerminalGraphics is now loaded, console graphics enabled.")
+end
+
+__init__() = begin
+
+    # The REPL terminal is only available after replinit,
+    # so defer integration until that point.
+
+    # if the REPL is already initialised, inject
+    # the third party module support manually, otherwise
+    # register the callback for when the REPL is ready
+    if isdefined(Base, :active_repl)
+        __repl_init__(Base.active_repl)
+    else
+        Base.atreplinit(__repl_init__)
+    end
 
 end
 
